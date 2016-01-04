@@ -23,6 +23,8 @@ from google.appengine.ext import ndb
 from flask import Flask
 from flask import Response
 from flask import request
+from flask import escape
+from flask import redirect
 
 from os import environ
 
@@ -36,6 +38,10 @@ max_memcache_entries = 12
 # If passcode is required then without the passcode you cannot retreive the data even if you knew or
 # guessed a transmitter id. If you don't want to bother with setting a passcode then you can set this to false.
 require_passcode = True
+
+use_geolocation = True
+
+google_maps_url = "https://maps.google.com/?q="
 
 # INSTRUCTIONS FOR CONFIGURING PARAKEET
 
@@ -71,6 +77,14 @@ require_passcode = True
 # If you want to add an extra layer of privacy you can use https:// instead of http:// but this will increase
 # data usage
 
+# INSTRUCTIONS FOR VIEWING THE GEOLOCATION MAP
+# Open your browser and visit and bookmark the url:
+# https://<your google app engine name>.appspot.com/<your transmitter id>/<your passcode>/map.get
+
+# This might be a little tricky because this url immediately redirects to google maps - on chrome you can
+# do this with bookmarks -> manage bookmarks -> (right click) add page
+
+
 
 
 # Set to True when in development
@@ -78,7 +92,8 @@ master_debug = environ['SERVER_SOFTWARE'].startswith('Development')
 
 # Output Template
 mydata = {"TransmitterId": "0", "_id": 1, "CaptureDateTime": 0, "RelativeTime": 0,
-		  "RawValue": 0, "TransmissionId": 0, "BatteryLife": 0, "UploaderBatteryLife": 0, "FilteredValue": 0}
+		  "RawValue": 0, "TransmissionId": 0, "BatteryLife": 0, "UploaderBatteryLife": 0, "FilteredValue": 0,
+		  "GeoLocation": ""}
 
 
 # Functions
@@ -114,6 +129,12 @@ def update_relative_time_json(this_data):
 		return this_data
 	else:
 		return None
+
+
+def get_alldata(this_set):
+	mcname = '{}alldata'.format(this_set)
+	datum = memcache.get(mcname)  # read existing if any
+	return datum
 
 
 def is_this_different_record_json(this_set, lr, lf):
@@ -177,6 +198,7 @@ class legacy:
 class AdminUser(ndb.Model):
 	user = ndb.StringProperty()
 
+
 # Main
 
 app = Flask(__name__)
@@ -190,8 +212,8 @@ def hello_world():
 		thisAdminUser = AdminUser.get_by_id('adminuser')
 		if (thisAdminUser):
 			if (user.email() == thisAdminUser.user):
-				reply = json.dumps(memcache.get_stats(),sort_keys=True)+"\n"
-				reply += "Debug: "+str(master_debug)
+				reply = json.dumps(memcache.get_stats(), sort_keys=True) + "\n"
+				reply += "Debug: " + str(master_debug)
 				return Response(reply + "\n", mimetype='text/plain')
 			else:
 				return "Hello " + user.nickname() + " you are logged in but are not the owner of this app."
@@ -246,6 +268,11 @@ def parakeetreceiver():
 			else:
 				reply = "!ACK"
 
+			if (use_geolocation == True):
+				mydata['GeoLocation'] = data.gl
+			else:
+				mydata['GeoLocation'] = ""
+
 			if (require_passcode == True):
 				ascii_tx_id = ascii_tx_id + "-" + data.pc
 
@@ -259,7 +286,7 @@ def parakeetreceiver():
 
 	except Exception, e:
 		if (master_debug):
-			raise # debug only
+			raise  # debug only
 		return "Got exception: " + str(e)
 
 
@@ -280,6 +307,20 @@ def transmitter_and_passcode(transmitter_id, pass_code):
 		return json_output(transmitter_id + "-" + pass_code)
 	else:
 		return json_output(transmitter_id)
+
+
+# mode including passcode for map link if enabled
+@app.route('/<transmitter_id>/<pass_code>/map.get')
+def geo_map(transmitter_id, pass_code):
+	datum = get_alldata(transmitter_id + "-" + pass_code)
+	if (datum == None):
+		return "No data"
+	if (require_passcode == True) and (use_geolocation == True):
+		for this_record in datum:
+			url = google_maps_url + str(escape(this_record['GeoLocation']))
+			return redirect(url, code=302)
+	else:
+		return "Will not show map without passcode and use_geolocation enabled"
 
 
 def json_output(transmitter_id):
