@@ -78,7 +78,11 @@ google_maps_url = "https://maps.google.com/?q="
 # data usage
 
 # INSTRUCTIONS FOR VIEWING THE GEOLOCATION MAP
-# Open your browser and visit and bookmark the url:
+
+# Use xDrip+ and enable Settings -> Extra test features and then find "Show Parakeet Map" on the right side menu
+# of the home screen. https://jamorham.github.io#xdrip-plus
+
+# Alternatively, open your browser and visit and bookmark the url:
 # https://<your google app engine name>.appspot.com/<your transmitter id>/<your passcode>/map.get
 
 # This might be a little tricky because this url immediately redirects to google maps - on chrome you can
@@ -98,22 +102,39 @@ mydata = {"TransmitterId": "0", "_id": 1, "CaptureDateTime": 0, "RelativeTime": 
 
 # Functions
 
-def save_record_to_memcache(this_set, my_data):
+def save_record_to_memcache(this_set, my_data, write_only=False):
+	ret_val = 0
 	mcname = '{}alldata'.format(this_set)
-	current = memcache.get(mcname)
-	if (current == None):
-		current = []
-	current = [my_data] + current
-	if (len(current) > max_memcache_entries):
-		del current[-1]
+
+	if write_only:
+		current = memcache.get(mcname)
+		if type(current) is int:
+			ret_val = current
+		current = my_data
+
+	else:
+		current = memcache.get(mcname)
+		if (current == None):
+			current = []
+		elif type(current) is int:
+			ret_val = current
+			current = []
+		if (len(current) > 0):
+			datum = current[0]  # first item only
+			if (datum['FilteredValue'] == mydata['FilteredValue'] and datum['RawValue'] == my_data['RawValue']):
+				return -1  # dupe
+		current = [my_data] + current
+		if (len(current) > max_memcache_entries):
+			del current[-1]
 	memcache.set(mcname, current, 86400)
+	return ret_val
 
 
 def get_cached_records(this_set, numberOfRecords):
 	mcname = '{}alldata'.format(this_set)
 	current = memcache.get(mcname)
 	reply = ""
-	if (current == None):
+	if (current == None) or type(current) is int:
 		current = []
 	for this_record in current:
 		reply += json.dumps(update_relative_time_json(this_record), sort_keys=master_debug) + "\n"
@@ -137,10 +158,11 @@ def get_alldata(this_set):
 	return datum
 
 
+# TODO optimize this in to setter
 def is_this_different_record_json(this_set, lr, lf):
 	mcname = '{}alldata'.format(this_set)
 	datum = memcache.get(mcname)  # read existing if any
-	if datum is None:
+	if datum is None or type(datum) is int:
 		return True
 	datum = datum[0]  # first item only
 	if (datum['FilteredValue'] != lf or datum['RawValue'] != lr):
@@ -248,7 +270,10 @@ def parakeetreceiver():
 		data.zi = request.args.get('zi', "0")
 		data.pc = request.args.get('pc', "")
 
-		if (data.lv != "") and (int(data.lv) > 0) and (int(data.lf) > 0) and (int(data.ts) > 0):
+		ret_val = 0
+
+		if (data.lv != "") and (((int(data.lv) > 0) and (int(data.lf) > 0) and (int(data.ts) > 0)) or (
+					str(int(data.zi)) == "10858926")):
 
 			mydata['CaptureDateTime'] = str(int(time.time()) - (int(data.ts) / 1000)) + "000"
 			mydata['RelativeTime'] = "0"
@@ -266,9 +291,9 @@ def parakeetreceiver():
 			if (master_debug == True):
 				reply = "!ACK" + "-" + ascii_tx_id
 			else:
-				reply = "!ACK"
+				reply = "!ACK "
 
-			if (use_geolocation == True):
+			if (use_geolocation == True) and str(int(data.zi)) != "10858926":
 				mydata['GeoLocation'] = data.gl
 			else:
 				mydata['GeoLocation'] = ""
@@ -276,18 +301,44 @@ def parakeetreceiver():
 			if (require_passcode == True):
 				ascii_tx_id = ascii_tx_id + "-" + data.pc
 
-			if ((is_this_different_record_json(ascii_tx_id, data.lv, data.lf))):
-				save_record_to_memcache(ascii_tx_id, mydata)
-			else:
-				reply = "!ACK dupe"
+			# if ((is_this_different_record_json(ascii_tx_id, data.lv, data.lf))):
+
+			ret_val = save_record_to_memcache(ascii_tx_id, mydata)
+		# else:
+		#	reply = "!ACK dupe"
 		else:
 			reply = "ERR"
-		return reply
+		if (ret_val > -1):
+			return reply + " " + str(ret_val) + "!"
+		else:
+			return "!ACK dupe"
+
 
 	except Exception, e:
 		if (master_debug):
 			raise  # debug only
 		return "Got exception: " + str(e)
+
+
+# custom functions to be executed on the parakeet itself, code=1 is stop sleeping
+@app.route('/<transmitter_id>/<pass_code>/setcode/<code>')
+def nosleep_transmitter_and_passcode(transmitter_id, pass_code, code):
+	code = int(code)
+	if (require_passcode == True):
+		ret_val = save_record_to_memcache(transmitter_id + "-" + pass_code, code, write_only=True)
+		return "OK " + str(ret_val)
+	else:
+		ret_val = save_record_to_memcache(transmitter_id, code, write_only=True)
+		return "OK" + str(ret_val)
+
+
+@app.route('/<transmitter_id>/setcode/<code>')
+def no_sleep_transmitter_only(transmitter_id, code):
+	code = int(code)
+	if (require_passcode == True):
+		return "require_passcode is set to True"
+	save_record_to_memcache(transmitter_id, code, write_only=True)
+	return "OK"
 
 
 # Data Output
