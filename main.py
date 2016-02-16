@@ -15,6 +15,7 @@
 
 import json
 import time
+from os import environ
 
 from google.appengine.api import memcache
 from google.appengine.api import users
@@ -22,11 +23,9 @@ from google.appengine.ext import ndb
 
 from flask import Flask
 from flask import Response
-from flask import request
 from flask import escape
 from flask import redirect
-
-from os import environ
+from flask import request
 
 # Global variables
 
@@ -51,8 +50,8 @@ google_maps_url = "https://maps.google.com/?q="
 # --- replace parakeet-receiver above with your own appspot project sub domain.
 # --- You can use my parakeet-receiver app engine instance for testing if you like.
 
-# UDP disabled 123456
-# --- replace 123456 with your secret pass code which you create here. This pass code ensures that it is
+# UDP disabled 12345
+# --- replace 12345 with your secret pass code which you create here (5 digits). This pass code ensures that it is
 # --- very hard for a random person to retrieve your data even from an app engine instance shared between users.
 # --- Whatever passcode you set, you also have to put it in to the xdrip app as described below.
 # --- We are reusing the UDP Port number setting on the Parakeet to function as a passcode for use
@@ -74,13 +73,13 @@ google_maps_url = "https://maps.google.com/?q="
 # if you have set require_passcode = False then use
 # http://<your google app engine name>.appspot.com/<your transmitter id>/json.get
 
-# If you want to add an extra layer of privacy you can use https:// instead of http:// but this will increase
-# data usage
+# If you want to add an extra layer of privacy you can use https:// instead of http:// but this will
+# increase data usage
 
 # INSTRUCTIONS FOR VIEWING THE GEOLOCATION MAP
 
-# Use xDrip+ and enable Settings -> Extra test features and then find "Show Parakeet Map" on the right side menu
-# of the home screen. https://jamorham.github.io#xdrip-plus
+# Use xDrip+ and enable Settings -> Extra test/parakeet features and then find "Show Parakeet Map" on the
+# right side menu of the home screen. https://jamorham.github.io#xdrip-plus
 
 # Alternatively, open your browser and visit and bookmark the url:
 # https://<your google app engine name>.appspot.com/<your transmitter id>/<your passcode>/map.get
@@ -158,7 +157,6 @@ def get_alldata(this_set):
 	return datum
 
 
-# TODO optimize this in to setter
 def is_this_different_record_json(this_set, lr, lf):
 	mcname = '{}alldata'.format(this_set)
 	datum = memcache.get(mcname)  # read existing if any
@@ -301,11 +299,7 @@ def parakeetreceiver():
 			if (require_passcode == True):
 				ascii_tx_id = ascii_tx_id + "-" + data.pc
 
-			# if ((is_this_different_record_json(ascii_tx_id, data.lv, data.lf))):
-
 			ret_val = save_record_to_memcache(ascii_tx_id, mydata)
-		# else:
-		#	reply = "!ACK dupe"
 		else:
 			reply = "ERR"
 		if (ret_val > -1):
@@ -320,7 +314,7 @@ def parakeetreceiver():
 		return "Got exception: " + str(e)
 
 
-# custom functions to be executed on the parakeet itself, code=1 is stop sleeping
+# custom functions to be executed on the parakeet itself, code=2 is stop sleeping
 @app.route('/<transmitter_id>/<pass_code>/setcode/<code>')
 def nosleep_transmitter_and_passcode(transmitter_id, pass_code, code):
 	code = int(code)
