@@ -120,8 +120,14 @@ def save_record_to_memcache(this_set, my_data, write_only=False):
 			current = []
 		if (len(current) > 0):
 			datum = current[0]  # first item only
-			if (datum['FilteredValue'] == mydata['FilteredValue'] and datum['RawValue'] == my_data['RawValue']):
+			if (datum['FilteredValue'] == my_data['FilteredValue'] and datum['RawValue'] == my_data['RawValue'] and (
+					datum['GeoLocation'] != "-15,-15" or my_data['GeoLocation'] == "-15,-15")):
 				return -1  # dupe
+
+			if (datum['GeoLocation'] == "-15,-15") and (my_data['GeoLocation'] != "-15,-15"):
+				datum['GeoLocation'] = my_data['GeoLocation']  # update to show parakeet geo location
+				my_data = datum # overwrite with saved
+
 		current = [my_data] + current
 		if (len(current) > max_memcache_entries):
 			del current[-1]
