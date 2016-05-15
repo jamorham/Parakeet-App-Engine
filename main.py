@@ -126,9 +126,10 @@ def save_record_to_memcache(this_set, my_data, write_only=False):
 
 			if (datum['GeoLocation'] == "-15,-15") and (my_data['GeoLocation'] != "-15,-15"):
 				datum['GeoLocation'] = my_data['GeoLocation']  # update to show parakeet geo location
-				my_data = datum # overwrite with saved
+				datum['UploaderBatteryLife'] = my_data['UploaderBatteryLife']  # update to show parakeet geo location
+			else:
+				current = [my_data] + current
 
-		current = [my_data] + current
 		if (len(current) > max_memcache_entries):
 			del current[-1]
 	memcache.set(mcname, current, 86400)
