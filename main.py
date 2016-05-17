@@ -128,7 +128,9 @@ def save_record_to_memcache(this_set, my_data, write_only=False):
 				datum['GeoLocation'] = my_data['GeoLocation']  # update to show parakeet geo location
 				datum['UploaderBatteryLife'] = my_data['UploaderBatteryLife']  # update to show parakeet geo location
 			else:
-				current = [my_data] + current
+				current = [my_data] + current   # not updated so add this record
+		else:
+				current = [my_data] + current	# empty data set add first record
 
 		if (len(current) > max_memcache_entries):
 			del current[-1]
