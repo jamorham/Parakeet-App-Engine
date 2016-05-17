@@ -139,6 +139,7 @@ def save_record_to_memcache(this_set, my_data, write_only=False):
 def get_cached_records(this_set, numberOfRecords):
 	mcname = '{}alldata'.format(this_set)
 	current = memcache.get(mcname)
+	memcache.set(mcname, current, 86400) # refresh it to keep alive
 	reply = ""
 	if (current == None) or type(current) is int:
 		current = []
