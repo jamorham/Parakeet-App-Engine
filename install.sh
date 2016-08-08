@@ -35,7 +35,7 @@ mv app.yaml.tmp app.yaml
 
 if gcloud config set app/promote_by_default true
 then
-if gcloud preview app deploy ./app.yaml
+if gcloud app deploy ./app.yaml
 then
 echo
 echo "INSTALL SUCCESS!"
