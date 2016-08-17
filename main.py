@@ -105,9 +105,9 @@ mydata = {"TransmitterId": "0", "_id": 1, "CaptureDateTime": 0, "RelativeTime": 
 # Functions
 
 def send_to_mongo(data):
-db = 'nightscout'
-	collection = 'SnirData'
 	key = 'D2a6iaurh-oihXrraOquZSySx9QnT_Gs'
+	db = 'nightscout'
+	collection = 'SnirData'
 	if not key:
 		return
 	try:
