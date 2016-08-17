@@ -15,6 +15,7 @@
 
 import json
 import time
+import urllib2
 from os import environ
 
 from google.appengine.api import memcache
@@ -101,6 +102,36 @@ mydata = {"TransmitterId": "0", "_id": 1, "CaptureDateTime": 0, "RelativeTime": 
 
 # Functions
 
+def send_to_mongo(data):
+  db = 'nightscout'
+  collection = 'SnirData'
+  key = 'D2a6iaurh-oihXrraOquZSySx9QnT_Gs'
+  if not key:
+      return
+  try: 
+      base_url='https://api.mlab.com/api/1/databases/nightscout/collections/SnirData?apiKey=D2a6iaurh-oihXrraOquZSySx9QnT_Gs&u=true'
+      base_url = 'https://api.mlab.com/api/1/databases/{}/collections/{}?apiKey={}&u=true'
+      url = base_url.format(db, collection, key)
+      mongo = data.copy()
+      mongo.pop('_id', None)
+      mongo.pop('RelativeTime', None)
+      mongo['ReceivedSignalStrength'] = 0
+      mongo['TransmitterId'] = dex_src_to_asc(mongo.get('TransmitterId', 0))
+      mongo['RawValue'] = int(mongo.get('RawValue', 0))
+      mongo['FilteredValue'] = int(mongo.get('FilteredValue', 0))
+      mongo['BatteryLife'] = int(mongo.get('BatteryLife', 0))
+      mongo['UploaderBatteryLife'] = int(mongo.get('UploaderBatteryLife', 0))
+      mongo['TransmissionId'] = int(mongo.get('TransmissionId', 0))
+      captured_time = long(mongo.get('CaptureDateTime', 0))
+      mongo['CaptureDateTime'] = captured_time
+      mongo['DebugInfo'] = 'parakeet %s' % time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000))
+      req = urllib2.Request(url, None, {'Content-Type': 'application/json'})
+      response = urllib2.urlopen(req, json.dumps(mongo))
+  except Exception, e:
+      if (master_debug):
+          raise  # debug only
+
+
 def save_record_to_memcache(this_set, my_data, write_only=False):
 	ret_val = 0
 	mcname = '{}alldata'.format(this_set)
@@ -134,6 +165,7 @@ def save_record_to_memcache(this_set, my_data, write_only=False):
 
 		if (len(current) > max_memcache_entries):
 			del current[-1]
+                send_to_mongo(my_data)
 	memcache.set(mcname, current, 86400)
 	return ret_val
 
@@ -223,6 +255,7 @@ class legacy:
 		self.db = ""
 		self.zi = ""
 		self.pc = ""
+                self.ti = ""
 
 
 class AdminUser(ndb.Model):
@@ -237,6 +270,7 @@ app = Flask(__name__)
 # Front page
 @app.route('/')
 def hello_world():
+        #write_to_mongo()
 	user = users.get_current_user()
 	if user:
 		thisAdminUser = AdminUser.get_by_id('adminuser')
@@ -277,6 +311,7 @@ def parakeetreceiver():
 		data.db = request.args.get('db', "0")
 		data.zi = request.args.get('zi', "0")
 		data.pc = request.args.get('pc', "")
+		data.ti = request.args.get('ti', "0")
 
 		ret_val = 0
 
@@ -289,6 +324,7 @@ def parakeetreceiver():
 			mydata['FilteredValue'] = data.lf
 			mydata['UploaderBatteryLife'] = data.bp
 			mydata['BatteryLife'] = str(int(data.db))
+			mydata['TransmissionId'] = str(int(data.ti))
 			if (data.zi != "0"):
 				mydata['TransmitterId'] = str(int(data.zi))  # might need conversion back to ascii
 			else:
