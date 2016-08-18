@@ -89,7 +89,9 @@ google_maps_url = "https://maps.google.com/?q="
 # do this with bookmarks -> manage bookmarks -> (right click) add page
 
 # INSTRUCTIONS FOR SENDING DATA TO MONGODB (OPTIONAL)
-# In order to allow received data to be stored in mongodb, please go to the function send_to_mongo
+# This option is only relevant for development/debugging using mlab.com and is not needed for normal
+# parakeet use.
+# In order to allow received data to be stored in mlab, please go to the function send_to_mongo
 # and set db, collection, and key to match your mongo installation. 
 # Please see http://docs.mlab.com/data-api/ for instructions on how to get the key.
 
@@ -105,7 +107,7 @@ mydata = {"TransmitterId": "0", "_id": 1, "CaptureDateTime": 0, "RelativeTime": 
 # Functions
 
 def send_to_mongo(data):
-	key = None 
+	key = None
 	db = 'nightscout'
 	collection = 'SnirData'
 	if not key:
@@ -127,7 +129,7 @@ def send_to_mongo(data):
 		mongo['CaptureDateTime'] = captured_time
 		mongo['DebugInfo'] = 'parakeet %s' % time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000))
 		req = urllib2.Request(url, None, {'Content-Type': 'application/json'})
-		response = urllib2.urlopen(req, json.dumps(mongo))
+		response = urllib2.urlopen(req, json.dumps(mongo), timeout = 4)
 	except Exception, e:
 		if (master_debug):
 			raise  # debug only
@@ -166,7 +168,6 @@ def save_record_to_memcache(this_set, my_data, write_only=False):
 
 		if (len(current) > max_memcache_entries):
 			del current[-1]
-		send_to_mongo(my_data)
 	memcache.set(mcname, current, 86400)
 	return ret_val
 
@@ -346,6 +347,8 @@ def parakeetreceiver():
 				ascii_tx_id = ascii_tx_id + "-" + data.pc
 
 			ret_val = save_record_to_memcache(ascii_tx_id, mydata)
+			if ret_val > -1:
+				send_to_mongo(mydata)
 		else:
 			reply = "ERR"
 		if (ret_val > -1):
