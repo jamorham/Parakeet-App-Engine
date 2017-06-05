@@ -15,6 +15,7 @@
 
 import json
 import time
+import urllib2
 from os import environ
 
 from google.appengine.api import memcache
@@ -87,8 +88,12 @@ google_maps_url = "https://maps.google.com/?q="
 # This might be a little tricky because this url immediately redirects to google maps - on chrome you can
 # do this with bookmarks -> manage bookmarks -> (right click) add page
 
-
-
+# INSTRUCTIONS FOR SENDING DATA TO MONGODB (OPTIONAL)
+# This option is only relevant for development/debugging using mlab.com and is not needed for normal
+# parakeet use.
+# In order to allow received data to be stored in mlab, please go to the function send_to_mongo
+# and set db, collection, and key to match your mongo installation. 
+# Please see http://docs.mlab.com/data-api/ for instructions on how to get the key.
 
 # Set to True when in development
 master_debug = environ['SERVER_SOFTWARE'].startswith('Development')
@@ -100,6 +105,35 @@ mydata = {"TransmitterId": "0", "_id": 1, "CaptureDateTime": 0, "RelativeTime": 
 
 
 # Functions
+
+def send_to_mongo(data):
+	key = None
+	db = 'nightscout'
+	collection = 'SnirData'
+	if not key:
+		return
+	try:
+		base_url = 'https://api.mlab.com/api/1/databases/{}/collections/{}?apiKey={}&u=true'
+		url = base_url.format(db, collection, key)
+		mongo = data.copy()
+		mongo.pop('_id', None)
+		mongo.pop('RelativeTime', None)
+		mongo['ReceivedSignalStrength'] = 0
+		mongo['TransmitterId'] = dex_src_to_asc(mongo.get('TransmitterId', 0))
+		mongo['RawValue'] = int(mongo.get('RawValue', 0))
+		mongo['FilteredValue'] = int(mongo.get('FilteredValue', 0))
+		mongo['BatteryLife'] = int(mongo.get('BatteryLife', 0))
+		mongo['UploaderBatteryLife'] = int(mongo.get('UploaderBatteryLife', 0))
+		mongo['TransmissionId'] = int(mongo.get('TransmissionId', 0))
+		captured_time = long(mongo.get('CaptureDateTime', 0))
+		mongo['CaptureDateTime'] = captured_time
+		mongo['DebugInfo'] = 'parakeet %s' % time.strftime('%d-%m-%Y %H:%M:%S', time.localtime(captured_time / 1000))
+		req = urllib2.Request(url, None, {'Content-Type': 'application/json'})
+		response = urllib2.urlopen(req, json.dumps(mongo), timeout = 4)
+	except Exception, e:
+		if (master_debug):
+			raise  # debug only
+
 
 def save_record_to_memcache(this_set, my_data, write_only=False):
 	ret_val = 0
@@ -223,6 +257,7 @@ class legacy:
 		self.db = ""
 		self.zi = ""
 		self.pc = ""
+		self.ti = ""
 
 
 class AdminUser(ndb.Model):
@@ -277,6 +312,7 @@ def parakeetreceiver():
 		data.db = request.args.get('db', "0")
 		data.zi = request.args.get('zi', "0")
 		data.pc = request.args.get('pc', "")
+		data.ti = request.args.get('ti', "0")
 
 		ret_val = 0
 
@@ -289,6 +325,7 @@ def parakeetreceiver():
 			mydata['FilteredValue'] = data.lf
 			mydata['UploaderBatteryLife'] = data.bp
 			mydata['BatteryLife'] = str(int(data.db))
+			mydata['TransmissionId'] = str(int(data.ti))
 			if (data.zi != "0"):
 				mydata['TransmitterId'] = str(int(data.zi))  # might need conversion back to ascii
 			else:
@@ -310,6 +347,8 @@ def parakeetreceiver():
 				ascii_tx_id = ascii_tx_id + "-" + data.pc
 
 			ret_val = save_record_to_memcache(ascii_tx_id, mydata)
+			if ret_val > -1:
+				send_to_mongo(mydata)
 		else:
 			reply = "ERR"
 		if (ret_val > -1):
