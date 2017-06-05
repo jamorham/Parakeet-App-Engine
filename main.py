@@ -270,7 +270,7 @@ def parakeetreceiver():
 		data.lv = request.args.get('lv', "0", type=str)
 		data.lf = request.args.get('lf', "0")
 		data.ts = request.args.get('ts', "0")
-		data.bp = request.args.get('bp', "50")
+		data.bp = request.args.get('bp', "0")
 		data.bm = request.args.get('bm', "0")
 		data.gl = request.args.get('gl', "")
 		data.ct = request.args.get('ct', "0")
